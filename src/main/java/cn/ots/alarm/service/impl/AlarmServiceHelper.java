@@ -25,7 +25,8 @@ import java.util.List;
  * @since 2020/12/4 22:09
  */
 @Component
-public class AlarmServiceHelper {
+public class AlarmServiceHelper
+{
 
     public static final Logger LOGGER = LoggerFactory.getLogger(AlarmServiceHelper.class);
 
@@ -38,13 +39,15 @@ public class AlarmServiceHelper {
      * @param channelId
      * @return
      */
-    public byte[] getFirstAndSaveOtherToQueue(String channelId) {
+    public byte[] getFirstAndSaveOtherToQueue(String channelId)
+    {
 
         //询问前先删除队列中的告警信息
         NettySocketGroup.WAITING_SEND_MSG_MAP.remove(channelId);
         //获取当前所有告警信息
         List<byte[]> alarms = alarmService.getAlarmInfos();
-        if (CollectionUtils.isEmpty(alarms)) {
+        if (CollectionUtils.isEmpty(alarms))
+        {
             //回复告警结束
             return ArrayUtils.EMPTY_BYTE_ARRAY;
         }
@@ -62,7 +65,8 @@ public class AlarmServiceHelper {
      * @param channelId
      * @return
      */
-    public byte[] getAlarmFromWaitingQueue(String channelId) {
+    public byte[] getAlarmFromWaitingQueue(String channelId)
+    {
         LinkedList<byte[]> linkedList = NettySocketGroup.WAITING_SEND_MSG_MAP.get(channelId);
         return CollectionUtils.isNotEmpty(linkedList) ? linkedList.pollLast() : ArrayUtils.EMPTY_BYTE_ARRAY;
     }
@@ -74,8 +78,10 @@ public class AlarmServiceHelper {
      * @param code
      * @return
      */
-    public static byte[] buildAlarmStr(AlarmEntity entity, int code) {
-        if (entity == null) {
+    public static byte[] buildAlarmStr(AlarmEntity entity, int code)
+    {
+        if (entity == null)
+        {
             LOGGER.error("[AlarmServiceHelper-buildAlarmStr-entity-is-null]");
             return ArrayUtils.EMPTY_BYTE_ARRAY;
         }
@@ -90,48 +96,49 @@ public class AlarmServiceHelper {
         //日期字节数组
         byte[] timeBytes = ByteUtils.dateTobyteArr(recoverTime);
         int alarmFlag = Integer.parseInt(eventId);
-        if (StringUtils.isAnyBlank(deviceType, eventDescription, alarmNature, eventId) || ArrayUtils.isEmpty(timeBytes)) {
+        if (StringUtils.isAnyBlank(deviceType, eventDescription, alarmNature, eventId) || ArrayUtils.isEmpty(timeBytes))
+        {
             LOGGER.error("[AlarmServiceHelper-buildAlarmStr-param-illegal]entity:{}", JSON.toJSONString(entity));
             return ArrayUtils.EMPTY_BYTE_ARRAY;
         }
         //构建返回结果
         byte[] retBytes = ArrayUtils.addAll(bytes, Constants.ALARM_DATA_BEGIN
-                //默认类型
-                , Constants.DEFAULT_REQ_TYPE
-                //告警类型
-                , ByteUtils.hexStringTobyteArray(deviceType)[0]
-                //车站号
-                , ByteUtils.hexStringTobyteArray(ByteUtils.numToHex(stationId))[0]
-                //机架号
-                , Constants.ALARM_DATA_POSITION_DEFAULT
-                //子架号
-                , Constants.ALARM_DATA_POSITION_DEFAULT
-                //槽位
-                , Constants.ALARM_DATA_POSITION_DEFAULT
-                //告警标志
-                , (byte) (alarmFlag >> 8 & 0xff)
-                //告警编码
-                , (byte) (Integer.parseInt(eventId) & 0xff)
-                //告警性质
-                , ByteUtils.hexStringTobyteArray(alarmNature)[0]
-                //告警编号
-                , codeByte
-                //年高位
-                , timeBytes[0]
-                //年低位
-                , timeBytes[1]
-                //月
-                , timeBytes[2]
-                //日
-                , timeBytes[3]
-                //时
-                , timeBytes[4]
-                //分
-                , timeBytes[5]
-                //秒
-                , timeBytes[6]
-                //结束位
-                , Constants.ALARM_DATA_END);
+            //默认类型
+            , Constants.DEFAULT_REQ_TYPE
+            //告警类型
+            , ByteUtils.hexStringTobyteArray(deviceType)[0]
+            //车站号
+            , ByteUtils.hexStringTobyteArray(ByteUtils.numToHex(stationId))[0]
+            //机架号
+            , Constants.ALARM_DATA_POSITION_DEFAULT
+            //子架号
+            , Constants.ALARM_DATA_POSITION_DEFAULT
+            //槽位
+            , Constants.ALARM_DATA_POSITION_DEFAULT
+            //告警标志
+            , (byte)(alarmFlag >> 8 & 0xff)
+            //告警编码
+            , (byte)(Integer.parseInt(eventId) & 0xff)
+            //告警性质
+            , ByteUtils.hexStringTobyteArray(alarmNature)[0]
+            //告警编号
+            , codeByte
+            //年高位
+            , timeBytes[0]
+            //年低位
+            , timeBytes[1]
+            //月
+            , timeBytes[2]
+            //日
+            , timeBytes[3]
+            //时
+            , timeBytes[4]
+            //分
+            , timeBytes[5]
+            //秒
+            , timeBytes[6]
+            //结束位
+            , Constants.ALARM_DATA_END);
 
         return retBytes;
     }

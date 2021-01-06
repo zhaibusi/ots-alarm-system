@@ -1,6 +1,7 @@
 package cn.ots.alarm;
 
 import cn.ots.alarm.netty.NettySever;
+import cn.ots.alarm.snmp.SNMPTrapListener;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -15,18 +16,27 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @MapperScan(basePackages = {"cn.ots.alarm.mapper"}) //扫描的mapper
 @SpringBootApplication
-public class OtsAlarmApplication implements CommandLineRunner {
+public class OtsAlarmApplication implements CommandLineRunner
+{
 
     @Autowired
     private NettySever nettySever;
 
-    public static void main(String[] args) {
+    @Autowired
+    private SNMPTrapListener snmpTrapListener;
+
+    public static void main(String[] args)
+    {
         SpringApplication.run(OtsAlarmApplication.class, args);
     }
 
     @Override
-    public void run(String... args) {
+    public void run(String... args)
+    {
+        //启动trap监听
+        snmpTrapListener.listen();
         //启动netty服务
         nettySever.init();
+
     }
 }
