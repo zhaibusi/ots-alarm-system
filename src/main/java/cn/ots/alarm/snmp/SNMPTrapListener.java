@@ -41,8 +41,8 @@ public class SNMPTrapListener implements CommandResponder
 {
     public static final Logger LOGGER = LoggerFactory.getLogger(SNMPTrapListener.class);
 
-    @Value("${uemEngineId}")
-    private String uemEngineId;
+/*    @Value("${uemEngineId}")
+    private String uemEngineId;*/
 
     @Value("${uemIp}")
     private String uemIp;
@@ -83,6 +83,7 @@ public class SNMPTrapListener implements CommandResponder
      */
     public void listen()
     {
+        byte[] localEngineID = MPv3.createLocalEngineID();
         try
         {
             ThreadPool threadPool = ThreadPool.create("OTS-SNMP-Trap", 1);
@@ -90,10 +91,7 @@ public class SNMPTrapListener implements CommandResponder
                 new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
             Address listenAddress = GenericAddress.parse("udp:" + uemIp + "/" + trapPort);
             TransportMapping<?> transport = new DefaultUdpTransportMapping((UdpAddress)listenAddress);
-
-            USM usm = new USM(SecurityProtocols.getInstance(),
-                new OctetString(ByteUtils.hesStringArrTobyteArr(StringUtils.split(uemEngineId, ","))),
-                0);
+            USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(localEngineID), 0);
             usm.setEngineDiscoveryEnabled(true);
             Snmp snmp = new Snmp(dispatcher, transport);
             snmp.getMessageDispatcher().addMessageProcessingModel(new MPv1());
@@ -107,13 +105,13 @@ public class SNMPTrapListener implements CommandResponder
                         new OctetString(StringUtils.EMPTY),
                         null,
                         new OctetString(StringUtils.EMPTY)));
-            LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, uemEngineId);
+            LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, localEngineID);
             snmp.listen();
             snmp.addCommandResponder(this);
         }
         catch (IOException e)
         {
-            LOGGER.error("listen-error!uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, uemEngineId, e);
+            LOGGER.error("listen-error!uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, localEngineID, e);
         }
     }
 
