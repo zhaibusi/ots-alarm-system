@@ -31,9 +31,6 @@ public class SNMPTrapListener implements CommandResponder
 {
     public static final Logger LOGGER = LoggerFactory.getLogger(SNMPTrapListener.class);
 
-/*    @Value("${uemEngineId}")
-    private String uemEngineId;*/
-
     @Value("${uemIp}")
     private String uemIp;
 
@@ -56,12 +53,14 @@ public class SNMPTrapListener implements CommandResponder
 
     private static final Charset CHARSET = StandardCharsets.UTF_8;
 
-    private static final OctetString mLocalEngineID = new OctetString(MPv3.createLocalEngineID());
+    private static final OctetString LOCAL_ENGINE_ID = new OctetString(MPv3.createLocalEngineID());
 
     @Override
     public void processPdu(CommandResponderEvent event)
     {
-        if (event.getSecurityModel() == 3)
+        int securityModel = event.getSecurityModel();
+        LOGGER.info("SNMPTrapListener-processPdu:{}", securityModel);
+        if (securityModel == 3)
         {
             PDU pdu = event.getPDU();
             if (pdu != null)
@@ -82,45 +81,37 @@ public class SNMPTrapListener implements CommandResponder
      * @throws Exception
      */
     public void listen()
+        throws Exception
     {
-        try
-        {
-            ThreadPool threadPool = ThreadPool.create("OTS-SNMP-Trap", 1);
-            MultiThreadedMessageDispatcher dispatcher =
-                new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
-            Address listenAddress = GenericAddress.parse("udp:" + uemIp + "/" + trapPort);
-            TransportMapping<?> transport = new DefaultUdpTransportMapping((UdpAddress)listenAddress);
+        Address listenAddress = GenericAddress.parse("udp:" + uemIp + "/" + trapPort);
+        TransportMapping<?> transport = new DefaultUdpTransportMapping((UdpAddress)listenAddress);
+        SNMP4JSettings.setReportSecurityLevelStrategy(SNMP4JSettings.ReportSecurityLevelStrategy.noAuthNoPrivIfNeeded);
+        CounterSupport.getInstance().addCounterListener(new DefaultCounterListener());
 
-            SNMP4JSettings.setReportSecurityLevelStrategy(SNMP4JSettings.ReportSecurityLevelStrategy.noAuthNoPrivIfNeeded);
-            CounterSupport.getInstance().addCounterListener(new DefaultCounterListener());
+        ThreadPool threadPool = ThreadPool.create("OTS-SNMP-Trap", 1);
 
-            USM usm = new USM(SecurityProtocols.getInstance(), mLocalEngineID, 0);
-            usm.setEngineDiscoveryEnabled(true);
-            Snmp snmp = new Snmp(dispatcher, transport);
-            snmp.getMessageDispatcher().addMessageProcessingModel(new MPv1());
-            snmp.getMessageDispatcher().addMessageProcessingModel(new MPv2c());
-            snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
-            // add all security protocols
-            SecurityProtocols.getInstance().addDefaultProtocols();
-            SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
-            SecurityModels.getInstance().addSecurityModel(usm);
+        MultiThreadedMessageDispatcher dispatcher =
+            new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+        dispatcher.addMessageProcessingModel(new MPv1());
+        dispatcher.addMessageProcessingModel(new MPv2c());
+        dispatcher.addMessageProcessingModel(new MPv3(LOCAL_ENGINE_ID.getValue()));
+        // add all security protocols
+        SecurityProtocols.getInstance().addDefaultProtocols();
+        SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
 
-            snmp.setLocalEngine(mLocalEngineID.getValue(), 0, 0);
-            snmp.getUSM()
-                .addUser(new OctetString(userName),
-                    new UsmUser(new OctetString(userName),
-                        mAuthProtocol,
-                        mAuthPassphrase,
-                        mPrivProtocol,
-                        mPrivPassphrase));
-            LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, mLocalEngineID);
-            snmp.addCommandResponder(this);
-            snmp.listen();
-        }
-        catch (IOException e)
-        {
-            LOGGER.error("listen-error!uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, mLocalEngineID, e);
-        }
+        Snmp snmp = new Snmp(dispatcher, transport);
+
+        USM usm = new USM(SecurityProtocols.getInstance(), LOCAL_ENGINE_ID, 0);
+        usm.setEngineDiscoveryEnabled(true);
+        SecurityModels.getInstance().addSecurityModel(usm);
+
+        snmp.setLocalEngine(LOCAL_ENGINE_ID.getValue(), 0, 0);
+        snmp.getUSM()
+            .addUser(new OctetString(userName),
+                new UsmUser(new OctetString(userName), mAuthProtocol, mAuthPassphrase, mPrivProtocol, mPrivPassphrase));
+        LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, LOCAL_ENGINE_ID);
+        snmp.addCommandResponder(this);
+        snmp.listen();
     }
 
     private String getChinese(String octetString)

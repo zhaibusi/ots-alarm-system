@@ -32,6 +32,7 @@ public class OtsAlarmApplication implements CommandLineRunner
 
     @Override
     public void run(String... args)
+        throws Exception
     {
         //启动trap监听
         snmpTrapListener.listen();
