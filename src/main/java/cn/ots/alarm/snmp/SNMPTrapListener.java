@@ -1,23 +1,13 @@
 package cn.ots.alarm.snmp;
 
 import cn.ots.alarm.netty.NettyServiceHelper;
-import cn.ots.alarm.utils.ByteUtils;
 import com.alibaba.fastjson.JSON;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.snmp4j.*;
-import org.snmp4j.mp.MPv1;
-import org.snmp4j.mp.MPv2c;
-import org.snmp4j.mp.MPv3;
-import org.snmp4j.security.SecurityModels;
-import org.snmp4j.security.SecurityProtocols;
-import org.snmp4j.security.USM;
-import org.snmp4j.security.UsmUser;
-import org.snmp4j.smi.Address;
-import org.snmp4j.smi.GenericAddress;
-import org.snmp4j.smi.OctetString;
-import org.snmp4j.smi.UdpAddress;
+import org.snmp4j.mp.*;
+import org.snmp4j.security.*;
+import org.snmp4j.smi.*;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
 import org.snmp4j.util.MultiThreadedMessageDispatcher;
 import org.snmp4j.util.ThreadPool;
@@ -56,7 +46,17 @@ public class SNMPTrapListener implements CommandResponder
     @Value("${userName}")
     private String userName;
 
+    private OID mAuthProtocol;
+
+    private OID mPrivProtocol;
+
+    private OctetString mPrivPassphrase;
+
+    private OctetString mAuthPassphrase;
+
     private static final Charset CHARSET = StandardCharsets.UTF_8;
+
+    private static final OctetString mLocalEngineID = new OctetString(MPv3.createLocalEngineID());
 
     @Override
     public void processPdu(CommandResponderEvent event)
@@ -83,7 +83,6 @@ public class SNMPTrapListener implements CommandResponder
      */
     public void listen()
     {
-        byte[] localEngineID = MPv3.createLocalEngineID();
         try
         {
             ThreadPool threadPool = ThreadPool.create("OTS-SNMP-Trap", 1);
@@ -91,27 +90,36 @@ public class SNMPTrapListener implements CommandResponder
                 new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
             Address listenAddress = GenericAddress.parse("udp:" + uemIp + "/" + trapPort);
             TransportMapping<?> transport = new DefaultUdpTransportMapping((UdpAddress)listenAddress);
-            USM usm = new USM(SecurityProtocols.getInstance(), new OctetString(localEngineID), 0);
+
+            SNMP4JSettings.setReportSecurityLevelStrategy(SNMP4JSettings.ReportSecurityLevelStrategy.noAuthNoPrivIfNeeded);
+            CounterSupport.getInstance().addCounterListener(new DefaultCounterListener());
+
+            USM usm = new USM(SecurityProtocols.getInstance(), mLocalEngineID, 0);
             usm.setEngineDiscoveryEnabled(true);
             Snmp snmp = new Snmp(dispatcher, transport);
             snmp.getMessageDispatcher().addMessageProcessingModel(new MPv1());
             snmp.getMessageDispatcher().addMessageProcessingModel(new MPv2c());
             snmp.getMessageDispatcher().addMessageProcessingModel(new MPv3(usm));
+            // add all security protocols
+            SecurityProtocols.getInstance().addDefaultProtocols();
+            SecurityProtocols.getInstance().addPrivacyProtocol(new Priv3DES());
             SecurityModels.getInstance().addSecurityModel(usm);
+
+            snmp.setLocalEngine(mLocalEngineID.getValue(), 0, 0);
             snmp.getUSM()
                 .addUser(new OctetString(userName),
                     new UsmUser(new OctetString(userName),
-                        null,
-                        new OctetString(StringUtils.EMPTY),
-                        null,
-                        new OctetString(StringUtils.EMPTY)));
-            LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, localEngineID);
-            snmp.listen();
+                        mAuthProtocol,
+                        mAuthPassphrase,
+                        mPrivProtocol,
+                        mPrivPassphrase));
+            LOGGER.info("[listen-success]uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, mLocalEngineID);
             snmp.addCommandResponder(this);
+            snmp.listen();
         }
         catch (IOException e)
         {
-            LOGGER.error("listen-error!uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, localEngineID, e);
+            LOGGER.error("listen-error!uemIp:{},trapPort:{},uemEngineId:{}", uemIp, trapPort, mLocalEngineID, e);
         }
     }
 
