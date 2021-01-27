@@ -2,6 +2,7 @@ package cn.ots.alarm;
 
 import cn.ots.alarm.netty.NettySever;
 import cn.ots.alarm.snmp.SNMPTrapListener;
+import cn.ots.alarm.snmp.SnmpConnection;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -25,6 +26,9 @@ public class OtsAlarmApplication implements CommandLineRunner
     @Autowired
     private SNMPTrapListener snmpTrapListener;
 
+    @Autowired
+    private SnmpConnection snmpConnection;
+
     public static void main(String[] args)
     {
         SpringApplication.run(OtsAlarmApplication.class, args);
@@ -35,7 +39,7 @@ public class OtsAlarmApplication implements CommandLineRunner
         throws Exception
     {
         //启动trap监听
-        snmpTrapListener.listen();
+        snmpConnection.listen();
         //启动netty服务
         nettySever.init();
 
