@@ -9,6 +9,7 @@ import org.snmp4j.mp.*;
 import org.snmp4j.security.*;
 import org.snmp4j.smi.*;
 import org.snmp4j.transport.DefaultUdpTransportMapping;
+import org.snmp4j.transport.TransportListener;
 import org.snmp4j.util.MultiThreadedMessageDispatcher;
 import org.snmp4j.util.ThreadPool;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
@@ -27,7 +29,7 @@ import java.nio.charset.StandardCharsets;
  * @since 2021/1/7 0:04
  */
 @Component
-public class SNMPTrapListener implements CommandResponder
+public class SNMPTrapListener implements CommandResponder, TransportListener
 {
     public static final Logger LOGGER = LoggerFactory.getLogger(SNMPTrapListener.class);
 
@@ -51,27 +53,27 @@ public class SNMPTrapListener implements CommandResponder
 
     private OctetString mAuthPassphrase;
 
+    private boolean mPacketDumpEnabled = true;
+
     private static final Charset CHARSET = StandardCharsets.UTF_8;
 
     private static final OctetString LOCAL_ENGINE_ID = new OctetString(MPv3.createLocalEngineID());
 
     @Override
-    public void processPdu(CommandResponderEvent event)
+    public <A extends Address> void processPdu(CommandResponderEvent<A> event)
     {
         int securityModel = event.getSecurityModel();
         LOGGER.info("SNMPTrapListener-processPdu:{}", securityModel);
-        if (securityModel == 3)
+        PDU pdu = event.getPDU();
+        if (pdu != null)
         {
-            PDU pdu = event.getPDU();
-            if (pdu != null)
-            {
-                pdu.getVariableBindings().forEach(varBind -> {
-                    //                    OID oid = varBind.getOid();
-                    String alarmInfo = getChinese(varBind.getVariable().toString());
-                    LOGGER.info("alarmInfo:{}", JSON.toJSONString(alarmInfo));
-                    nettyServiceHelper.alarmTrapHandler(alarmInfo);
-                });
-            }
+            LOGGER.info("SNMPTrapListener-processPdu-receive-data:{}", pdu.toString());
+            pdu.getVariableBindings().forEach(varBind -> {
+                //                    OID oid = varBind.getOid();
+                String alarmInfo = getChinese(varBind.getVariable().toString());
+                LOGGER.info("alarmInfo:{}", JSON.toJSONString(alarmInfo));
+                nettyServiceHelper.alarmTrapHandler(alarmInfo);
+            });
         }
 
     }
@@ -91,7 +93,7 @@ public class SNMPTrapListener implements CommandResponder
         ThreadPool threadPool = ThreadPool.create("OTS-SNMP-Trap", 1);
 
         MultiThreadedMessageDispatcher dispatcher =
-            new MultiThreadedMessageDispatcher(threadPool, new MessageDispatcherImpl());
+            new MultiThreadedMessageDispatcher(threadPool, new SnmpCommandMessageDispatcher());
         dispatcher.addMessageProcessingModel(new MPv1());
         dispatcher.addMessageProcessingModel(new MPv2c());
         dispatcher.addMessageProcessingModel(new MPv3(LOCAL_ENGINE_ID.getValue()));
@@ -137,5 +139,54 @@ public class SNMPTrapListener implements CommandResponder
         {
             return octetString;
         }
+    }
+
+    @Override
+    public <A extends Address> void processMessage(TransportMapping<? super A> sourceTransport, A incomingAddress,
+        ByteBuffer wholeMessage, TransportStateReference tmStateReference)
+    {
+        byte[] msg = new byte[wholeMessage.remaining()];
+        wholeMessage.get(msg);
+        wholeMessage.rewind();
+        LOGGER.debug("Packet received from " + uemIp + " on " + sourceTransport.getListenAddress() + ":");
+        LOGGER.debug(new OctetString(msg).toHexString());
+    }
+
+    public class SnmpCommandMessageDispatcher extends MessageDispatcherImpl
+    {
+
+        public SnmpCommandMessageDispatcher()
+        {
+            super();
+        }
+
+        @Override
+        public <A extends Address> void processMessage(TransportMapping<? super A> sourceTransport, A incomingAddress,
+            ByteBuffer wholeMessage, TransportStateReference tmStateReference)
+        {
+            if (mPacketDumpEnabled)
+            {
+                SNMPTrapListener.this.processMessage(sourceTransport, incomingAddress, wholeMessage, tmStateReference);
+            }
+            super.processMessage(sourceTransport, incomingAddress, wholeMessage, tmStateReference);
+        }
+
+        @Override
+        protected <A extends Address> void sendMessage(TransportMapping<? super A> transport, A destAddress,
+            byte[] message, TransportStateReference tmStateReference, long timeoutMillis, int maxRetries)
+            throws IOException
+        {
+            super.sendMessage(transport, destAddress, message, tmStateReference, timeoutMillis, maxRetries);
+            if (mPacketDumpEnabled)
+            {
+                SNMPTrapListener.this.processMessage(transport, destAddress, message);
+            }
+        }
+    }
+
+    public void processMessage(TransportMapping<?> sourceTransport, Address destAddress, byte[] message)
+    {
+        LOGGER.debug("Packet sent to " + destAddress + " on " + sourceTransport.getListenAddress() + ":");
+        LOGGER.debug(new OctetString(message).toHexString());
     }
 }
