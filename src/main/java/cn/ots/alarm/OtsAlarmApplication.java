@@ -39,7 +39,6 @@ public class OtsAlarmApplication implements CommandLineRunner
         throws Exception
     {
         //启动trap监听
-        //        snmpConnection.listen();
         snmpTrapListener.listen();
         //启动netty服务
         nettySever.init();
